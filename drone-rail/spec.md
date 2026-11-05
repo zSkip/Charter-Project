@@ -26,7 +26,7 @@ Reading the sketch: the top two views show one rail end twice, unloaded (spring 
 | Rail contact point | Wing root, where the wing blends into the body | user |
 | Propeller | One tractor (puller) prop at the nose | user |
 | Prop diameter / state at touchdown | 700 mm, stopped with the blades vertical | **assumed: confirm** |
-| Wing position / tail | High wing. Underside of the horizontal tail at least 150 mm above the wing underside | **assumed: confirm** |
+| Wing position / tail | High wing. **Drone requirement:** horizontal tail underside at least 330 mm above the wing underside, or a V-tail or T-tail, for landings up to 5° nose-up | user (approved 2026-11-05) |
 | Landing speed | 40 knots (20.6 m/s) nominal, 45 knots design maximum | user / assumed |
 | Sink rate at touchdown | Up to 1.5 m/s | assumed (user has no data) |
 | Crosswind | Up to 15 knots | assumed (user has no data) |
@@ -54,7 +54,7 @@ Landing conditions vary, so speed, sink rate and grip are parameters, not fixed 
 | `body_width` | 508 mm | |
 | `body_drop` | 254 mm | wing underside to body bottom |
 | `prop_dia` | 700 mm | |
-| `tail_clear` | 150 mm | tail underside above wing underside |
+| `tail_clear` | 330 mm | tail underside above wing underside (drone requirement, sections 2 and 11) |
 | `landing_speed_kn` | 40 | |
 | `sink_rate_ms` | 1.5 | |
 | `grip` | 0.3 | friction coefficient, cap on wing |
@@ -62,11 +62,11 @@ Landing conditions vary, so speed, sink rate and grip are parameters, not fixed 
 | `side_clear` | 25 mm | gap between body and cap each side |
 | `rail_gap` | `body_width + 2 * side_clear` (558 mm) | inner gap between caps |
 | `cap_width` | 150 mm | |
-| `cap_wall` | 3 mm | |
+| `cap_wall` | 2 mm | was 3 mm; 2 mm for the 25 kg target (approved 2026-11-05) |
 | `cap_overlap` | 100 mm | shingle overlap at joints |
-| `core_w` / `core_h` / `core_wall` | 50 / 100 / 3 mm | aluminium core tube |
+| `core_w` / `core_h` / `core_wall` | 50 / 100 / 2 mm | aluminium core tube (wall was 3 mm) |
 | `rail_top_h` | 700 mm | ground to cap top, unloaded |
-| `section_len` | 2400 mm | |
+| `section_len` | 2000 mm | was 2400 mm; 2000 mm for the 25 kg target (approved 2026-11-05) |
 | `frame_inset` | 300 mm | U-frame position from the section end |
 | `spring_travel` | 50 mm | |
 | `spring_rate` | 90 (N/mm) | per wing contact point |
@@ -78,10 +78,10 @@ Rail centre-to-centre spacing comes out at `rail_gap + cap_width`, about 708 mm.
 
 ---
 
-## 4. Base rail section (full scale, 2400 mm)
+## 4. Base rail section (full scale, 2000 mm; was 2400 mm)
 
-- **Core:** two rails, each a 6061 aluminium box tube, 50 W × 100 H × 3 mm wall.
-- **Cap:** a carbon fibre cap over each core. It has a rounded (crowned) top 150 mm wide, 3 mm walls, and sides that drop down over the core. Each end gets a rounded nose, as in the sketch.
+- **Core:** two rails, each a 6061 aluminium box tube, 50 W × 100 H × 2 mm wall.
+- **Cap:** a carbon fibre cap over each core. It has a rounded (crowned) top 150 mm wide, 2 mm walls, and sides that drop down over the core. Each end gets a rounded nose, as in the sketch.
 - **Suspension (from the sketch):** two spring points per cap. Each one is:
   - a vertical coil spring between the top of the core and the underside of the cap, and
   - a screw through a vertical slot in the side of the cap into the core. It limits travel to 50 mm and stops the cap lifting off.
@@ -90,7 +90,7 @@ Rail centre-to-centre spacing comes out at `rail_gap + cap_width`, about 708 mm.
   - A splice tongue on the downstream end of each core slides into the next core, locked by two quick-release ball-lock pins per rail.
   - The caps **overlap 100 mm like roof shingles**: each cap's tail sits on top of the next cap's nose. A loaded cap pushes the next one down with it, so the wing never meets a step up.
 - **Frame:** two open U-frames per section, 300 mm in from each end. Each has one leg under each rail and a cross bar at ground level, its top no higher than 80 mm, so the body and prop tip pass over it freely. Each U-frame splits at the middle with a pin joint, so a section comes apart into two single-rail halves.
-- **Weight target:** no more than 25 kg per section (two people or a vehicle) and 12.5 kg per half (one person). Estimate: about 23 kg.
+- **Weight target:** no more than 25 kg per section (two people or a vehicle) and 12.5 kg per half (one person). Built: 23.2 kg per section, 11.6 kg per half (2 mm walls, 2000 mm sections).
 - **Clearance checks** with the drone stand-in, springs fully compressed:
   - body bottom above the cross bars
   - prop tip above the cross bars and clear of the rails
@@ -156,7 +156,7 @@ Long runs can use simplified or patterned copies of the linked section to keep F
 - **Fits:** 0.2 mm clearance on parts that slide.
 - **Hardware:** small real springs or printed flexures, and 2 mm steel pins or M2 screws.
 - **Parts:** base section (rails, caps, U-frames), one spring point, one entry funnel section, drone stand-in.
-- **Output:** export the STLs to `drone-rail/scale-model/`.
+- **Output:** export the STLs to `drone-rail/05-scale-model/` (folder layout in `progress.md`).
 
 ---
 
@@ -177,7 +177,7 @@ Stop and report back as soon as anything blocks the work or a clearance check fa
 
 ## 11. Risks to watch
 
-1. **Tail strike.** If the underside of the horizontal tail sits lower than the wing underside at landing pitch, the tail hits the rails before the wing does. Nose-up at touchdown makes this worse: 5° drops a tail 3 m back by about 260 mm.
+1. **Tail strike.** If the underside of the horizontal tail sits lower than the wing underside at landing pitch, the tail hits the rails before the wing does. Nose-up at touchdown makes this worse: 5° drops a tail 3 m back by about 260 mm. **Drone requirement:** horizontal tail underside at least 330 mm above the wing underside, or a V-tail or T-tail, for landings up to 5° nose-up. That leaves 280 mm with the springs fully compressed (limit about 5.3° compressed, 6.3° at touchdown).
 2. **Prop strike.** The rails' inner edges are about 280 mm from the centreline, but a 700 mm prop reaches 350 mm. A spinning prop, or one stopped with the blades horizontal, hits the rails. It has to be stopped with the blades vertical, or be a folding prop.
 3. **Stopping lengths are best case.** See section 6.
 4. **Wear and heat at the wing root.** About 30 kJ per landing goes into the patches where the wing touches the caps.
@@ -190,7 +190,7 @@ Stop and report back as soon as anything blocks the work or a clearance check fa
 On 2026-11-05 the user approved this spec ("yes start it"). Every open item uses its default until the user says otherwise.
 
 - [x] Prop: 700 mm, stopped with the blades vertical (default)
-- [x] High wing; tail underside at least 150 mm above the wing underside (default)
+- [x] High wing; tail underside at least 330 mm above the wing underside, or a V-tail or T-tail (drone requirement, approved 2026-11-05; was 150 mm)
 - [x] Printer bed 220 × 220 mm, 1:10 scale (default)
 - [x] Create the Fusion project "Drone Rail Recovery" and save designs into it (approved with the spec)
 - [x] Phased build, with a report back after each phase (approved)

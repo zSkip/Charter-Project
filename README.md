@@ -17,6 +17,7 @@ It is a mock concept and prototype, modelled in Autodesk Fusion. Every size is a
 | Where the rails touch the drone | Wing root, where the wing blends into the body |
 | Propeller | One at the nose (puller). It must be stopped blades-vertical or folded at touchdown |
 | Tail | The underside of the horizontal tail must sit at least 330 mm above the wing underside, or the drone uses a V-tail or T-tail |
+| Rail section | 2.0 m long, 23.2 kg. Splits into two halves of about 11.6 kg each for a one-person carry |
 
 The full design spec is [drone-rail/spec.md](drone-rail/spec.md), and the build log is [drone-rail/progress.md](drone-rail/progress.md).
 
@@ -26,7 +27,7 @@ Every version is its own folder, grouped by what it changes. Each version folder
 
 - `build_<ID>.py`: the Fusion Python script that builds that version. It uses the shared code in `drone-rail/fusion-scripts/`.
 - `*.png`: pictures of the model.
-- `*.f3d` or `*.f3z`: the Fusion model itself. A design with linked parts (the multi-section runs) is exported as .f3z.
+- `*.f3d`: the Fusion model itself. Runs that link in the shared base section carry an embedded copy of it, so every file opens on its own.
 
 | Group | Versions |
 |---|---|
