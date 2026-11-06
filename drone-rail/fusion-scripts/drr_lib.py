@@ -245,7 +245,8 @@ _WANT = {'al': ['Aluminum 6061', 'Aluminum'],
          'cf': ['Carbon Fiber', 'Carbon'],
          'steel': ['Steel', 'Steel, Alloy'],
          'uhmw': ['UHMW, White', 'UHMW'],
-         'pekkcf': ['Carbon Fibers']}
+         'pekkcf': ['Carbon Fibers'],
+         'nylon': ['Nylon 6/6', 'Nylon']}
 CFRP = 'CFRP (carbon fibre)'
 
 
@@ -288,6 +289,35 @@ def setmat(comp, key):
     if m:
         for b in comp.bRepBodies:
             b.material = m
+
+
+def look(name, rgb):
+    """Design appearance 'name' in colour rgb (0-255), copied from a matte library plastic."""
+    d = des()
+    a = d.appearances.itemByName(name)
+    if a:
+        return a
+    src = None
+    for lib in app.materialLibraries:
+        if 'Appearance' not in lib.name:
+            continue
+        for i in range(lib.appearances.count):
+            x = lib.appearances.item(i)
+            if x.name.startswith('Plastic - Matte'):
+                src = x
+                break
+        if src:
+            break
+    a = d.appearances.addByCopy(src, name)
+    n = 0
+    for p in a.appearanceProperties:
+        cp = adsk.core.ColorProperty.cast(p)
+        if cp and p.id in ('opaque_albedo', 'generic_diffuse'):
+            cp.value = adsk.core.Color.create(rgb[0], rgb[1], rgb[2], 255)
+            n += 1
+    if not n:
+        raise RuntimeError('no colour property on ' + src.name)
+    return a
 
 
 def shot(path, eye, target, extent=None, w=800, h=600):

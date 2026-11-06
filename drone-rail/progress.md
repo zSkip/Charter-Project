@@ -11,6 +11,8 @@
     - `G1 Entry Funnel` holding `Funnel Section 1–3 Frames` (in place, parametric)
     - `Drone Stand-in`
   - If funnel parameters change, re-run `step_fix_funnel`.
+  - Task 0 (2026-11-05): root also holds `Exit Hood FR3`/`FL3` (built by stages R3/L3), see Phase 2 below.
+- Phase 2 stopping designs (2026-11-05), all **saved** in the project root: `DRR Base Section Simple`, `DRR Catch Net`, `DRR A Friction Only`, `DRR B Braking Zone`, `DRR C Uphill Ramp`, `DRR D1 Catch Net`, `DRR D2 Rising Grip`, `DRR D3 Arresting Cable`.
 - Build code: `fusion-scripts/drr_lib.py` (helpers) and `drr_build.py` (steps, plus the version-folder helpers `shoot`, `export_f3d`, `activate`, `step_save`). Each version folder has a `build_<ID>.py` that runs these steps in stages. See "Folder layout and export method" below.
 
 ## Built
@@ -29,6 +31,20 @@
     - The cap's 100 mm tail hood is trimmed flush with the base cap's inner edge.
     - Checked: the exit pins sit on the base core centreline (x 6050/6100, y ±354). Cores, tongues and pins show no interference.
   - **Tapered guide strips.** UHMW strip thickness falls linearly with global x, from `guide_t` at x=0 to 0 at the funnel exit (6000). The strip faces then run straight from `funnel_gap0` to `rail_gap`, so the body keeps 25 mm side clearance at the exit.
+
+- **Phase 2 stopping versions (2026-11-05).** Code is in `drr_build.py` under "Phase 2". Each run links `DRR Base Section` (detailed) for the first 2 sections and around what's new, `DRR Base Section Simple` everywhere else, and `DRR Catch Net` (D1) at the end, net_gap 1.5 m past the last section. Drone stand-in at x 3 m (touchdown) unless noted. Version parameters are in `VPARAMS`. Stop distances come from v² = 2·g·(μ cos θ + sin θ)·d at 40 kn.
+
+  | Version | Design | Sections (detailed) | Length | Stops at | .f3d | Notes |
+  |---|---|---|---|---|---|---|
+  | Simple | `DRR Base Section Simple` | 1 | 2 m | – | 0.30 MB | 12 plain bodies: hollow core (with pin holes for the previous section's pins), solid cap with lowered nose and clearance over the core, U-frame halves, foot pads. No tongue, so a simple → detailed joint has no tongue. Not for mass. |
+  | D1 | `DRR Catch Net` + `DRR D1 Catch Net` | 3 (all) | 6 m | – | 0.11 + 0.31 MB | Net: 2 braced 120 mm steel posts with plates, 29 × 8 nylon cords (mesh 246 × 236), span 6.9 m, 150–1800 mm high. Wingtips clear the posts by 400 mm. Drone shown 1.5 m short of the net. |
+  | A | `DRR A Friction Only` | 36 (1–2) | 72 m | 71.9 m at 0.3 | 0.14 MB | At grip 0.2 it leaves the run at 11.9 m/s, so the net catches it |
+  | B | `DRR B Braking Zone` | 24 (1–2, 12–13) | 48 m | 48.0 m | 0.19 MB | Sections 13–24 caps: appearance "DRR high grip 0.6" (orange) |
+  | C | `DRR C Uphill Ramp` | 32 (1–2, 18–19) | 64 m (36 flat + 28 ramp) | 63.9 m | 1.19 MB | Ramp turned 5° about the cap-top line at the end of the hood at the kink. Rise 2.44 m. 14 `Ramp Trestles n` components (beam under the feet, 2 posts, X-brace above 600 mm; the first foot is 20 mm up, on its levelling stud). Net on 4 raised columns (`Net Base`). **Kink splice clash, open issue 5.** |
+  | D2 | `DRR D2 Rising Grip` | 24 (1–2) | 48 m | 48.0 m | 0.46 MB | 6 bands of 4 sections, "DRR grip 0.2" to "0.7", blue → red |
+  | D3 | `DRR D3 Arresting Cable` | 6 (1–2) | 12 m | 11.8 m (2 g from cable 1 at x 1.0 m, 10.8 m; 2.76 kN) | 0.21 MB | `Arresting Gear`: 2 cables (16 mm, z 150) and 4 absorber drums on plates. `DR Hook` on the stand-in (shank plus forward toe), throat 300 mm short of cable 1. See open issue 6. |
+
+  - Checks, all versions: drone clearances unchanged (body to frames 80/30 loaded, body to rails 25.0, tail 330). Interference at the detailed ↔ simple joints and at the run ends is clear. The D3 check adds cables, drums, hook, frames, feet and plates near the entry: no new hits. The only hits are known ones inside the base (foot studs in the frame legs) and the prop disc (risk 2). C fails at the kink only (open issue 5).
 
 ## Parameters
 - All of spec section 3 (metric), plus added detail params (comment "assumed" or "derived"), listed in `drr_build.py` `PARAMS`.
@@ -76,18 +92,25 @@
 - Interference check (`analyzeInterference`, all 6 funnel rails plus base section 1; cores, caps, tongues, pins, strips): only open issue 1 below.
 
 ## Open issues for the user
-1. **New: funnel-to-base cap crown clash.** The `Cap FR3` and `Cap FL3` tail hoods overlap the first base caps' nose zones by 1.31 cm³ per side, about 0.5 mm deep at 20–40 mm inboard of the core centreline (calculated).
-   - Cause: the 250 mm funnel cap has a flatter crown (R 1305) than the 150 mm base cap (R 472). This has been there since Phase 1, at any funnel angle.
-   - Fix options, needing the user's choice:
-     - (a) give the last funnel cap's tail hood the base cap's crown over the overlap
-     - (b) cap_gap 1 → 1.6 mm, which lowers every base nose zone
-     - (c) a separate short transition cap
-2. **.f3z is not available through the API.** `createFusionArchiveExportOptions` + `execute` only write .f3d. A ".f3z" file name gives "x.f3z.f3d". For the run, the .f3d is one self-contained archive with the linked base sections embedded. A true .f3z needs the Fusion UI (File > Export > .f3z) by hand.
+1. **Resolved 2026-11-05 (option a): funnel-to-base cap crown clash.** The last funnel caps are now cut at the joint plane, and an `Exit Hood FR3`/`FL3` with the base cap's crown (R 472, 150 wide, 2 mm wall) covers the 100 mm overlap along the base rail axis. The interference check (all 6 funnel rails, both hoods, base section 1: 52 bodies) is clear. Body to rails is now 24.9 mm (was 25.0) at the inner corner of the cut funnel cap. The wing meets the funnel-to-base crown step (up to about 1.5 mm, 30 mm inboard) at the joint instead of at the hood tail.
+2. **.f3z is not available through the API, and linked designs are NOT embedded in an .f3d.** `createFusionArchiveExportOptions` + `execute` only write .f3d, and a ".f3z" file name gives "x.f3z.f3d". Correction to Phase 1: the D1 run with 3 linked base sections exports at 0.11 MB, against 6.0 MB for the base alone, so a run .f3d holds only its own geometry plus references. G1's 20.5 MB is its own 6 funnel rails. Every linked design is therefore exported in its own folder: base and simple in `00-base-section`, the net in `D1-catch-net/DRR_D1_net.f3d`. A self-contained .f3z needs the Fusion UI (File > Export) by hand.
 3. Funnel length is now 6.0 m (3 × 2000), against "about 7.2 m" in spec G1. Use funnel_sections = 4 (8 m) if a longer funnel is wanted.
 4. Assumed values to confirm: funnel_cap_w 250, guide_t 10, tail span 1800, prop hub at body mid-depth, spring and cap detail sizes (see params).
 
+5. **New, C: the 5° kink splice clashes.** At the joint from flat section 18 to the first ramp section, the straight splice tongue and its 2 ball-lock pins go into the core of the next section, which is tilted 5°. Hits per side: tongue 4.28 cm³, pins 1.14 and 0.65 cm³. The caps are clear, because the ramp turns about the cap-top line at the end of the hood, so the wing sees no step. Not redesigned. Options for the user:
+   - (a) a kinked splice in pitch: tongue half and pins turned by ramp_ang, the same idea as the G1 exit
+   - (b) a short hinged transition section
+   - (c) a separate bent tongue part at the kink only
+6. **New, D3: hook clearance under load.** The hook toe clears the U-frame cross-bar tops by 40 mm unloaded and about 32 mm at static sag (8 mm). At full spring compression (50 mm) it would be 10 mm below the bar tops. The hook needs to be sprung or pivoting, as real tailhooks are, or the cable height and toe need rethinking. Other D3 clearances: toe top to cable 12 mm (the throat), prop tip to cable top 65 mm (15 mm at full compression), body to cable 288 mm.
+7. Assumed Phase 2 values to confirm (all parameters, comment "assumed"):
+   - D1: net span = wingspan + 800, net 150–1800 mm high, mesh 250 mm, 120 mm posts, braces 1.5 m back, net 1.5 m past the run end
+   - D3: cables at x 1.0 and 3.0 m, z 150 mm; drums 450 dia, 900 mm outboard of the rails; hook 1.2 m behind the wing
+   - C: trestle tube 100, beam 100
+   - B/D2: grip shown as cap appearance overrides, colouring the whole cap including the skirts; a real braking surface would be a coating on the crown only
+
 ## Next
-- Phase 1 fixes done. Phase 2 (the other 15 versions) follows the folder layout below, one session and one version at a time, after the user's go.
+- Phase 1 fixes done. Phase 2 stopping versions (A, B, C, D1, D2, D3) done 2026-11-05, apart from open issue 5 (C kink), which needs the user's choice.
+- Left for later sessions: entry G2, G3; damping S2, S3; mounting M2–M6; Phase 3 scale model.
 
 ## Phase 1 fixes and folder layout: done (2026-11-05)
 All 7 hand-over tasks are done:
@@ -115,7 +138,7 @@ fusion-scripts/            shared code: drr_lib.py, drr_build.py (no version fil
 05-scale-model/            ID scale (Phase 3: STLs go here)
 ```
 - Empty folders hold a `.gitkeep`. Delete it when the folder is filled.
-- Filled so far: `00-base-section`, `01-entry/G1-funnel`, `03-damping/S1-springs-only`, `04-mounting/M1-levelling-feet`.
+- Filled so far: `00-base-section` (base and simple), `01-entry/G1-funnel`, all 6 of `02-stopping/`, `03-damping/S1-springs-only`, `04-mounting/M1-levelling-feet`.
 
 ### What each version folder must contain
 | File | Rule |
@@ -170,7 +193,7 @@ def run(_context: str):
   - `opts = em.createFusionArchiveExportOptions(path)`, or `(path, component)` for one component
   - `em.execute(opts)`
 - It deletes an old file first and raises if the file is missing or 0 bytes.
-- The API writes **.f3d only**. A design with linked components (the G1 run) becomes one self-contained .f3d with the linked base sections embedded. Use .f3d for every version; a .f3z can only be made by hand in the UI.
+- The API writes **.f3d only**, and linked designs are not embedded (open issue 2). Export every linked design in its own folder. Use .f3d for every version; a .f3z can only be made by hand in the UI.
 - `B.shoot(folder, name, eye, target, extent=None, hide=())` saves a 1200×900 PNG through `viewport.saveAsImageFile`:
   - eye and target are in mm; extent is the view width in mm, or None to fit all
   - it raises on a missing or empty file
@@ -183,6 +206,14 @@ def run(_context: str):
   | `01-entry/G1-funnel` | `DRR_G1_run_3_section.f3d` 20 440 075; `G1_iso.png` 442 075; `G1_closeup.png` 292 481 |
   | `03-damping/S1-springs-only` | `DRR_S1_spring_point.f3d` 1 904 764; `S1_iso.png` 245 981; `S1_closeup.png` 169 337 |
   | `04-mounting/M1-levelling-feet` | `DRR_M1_levelling_foot.f3d` 153 028; `DRR_M1_bolt_down_plate.f3d` 115 623; `M1_iso.png` 194 611; `M1_closeup.png` 184 995 |
+| `01-entry/G1-funnel` (task 0, re-exported) | `DRR_G1_run_3_section.f3d` 20 503 142; `G1_iso.png` 442 007; `G1_closeup.png` 294 559 |
+| `00-base-section` (simple) | `build_simple.py`; `DRR_base_section_simple.f3d` 302 766; `simple_iso.png` 242 883; `simple_closeup.png` 257 210 |
+| `02-stopping/A-friction-only` | `DRR_A_friction_only.f3d` 135 328; `A_iso.png` 174 057; `A_closeup.png` 290 534 |
+| `02-stopping/B-braking-zone` | `DRR_B_braking_zone.f3d` 188 415; `B_iso.png` 144 710; `B_closeup.png` 250 741 |
+| `02-stopping/C-uphill-ramp` | `DRR_C_uphill_ramp.f3d` 1 191 616; `C_iso.png` 295 783; `C_closeup.png` 261 440 |
+| `02-stopping/D1-catch-net` | `DRR_D1_catch_net.f3d` (run) 114 056; `DRR_D1_net.f3d` (net design) 313 656; `D1_iso.png` 419 241; `D1_closeup.png` 385 293 |
+| `02-stopping/D2-rising-grip` | `DRR_D2_rising_grip.f3d` 456 135; `D2_iso.png` 144 821; `D2_closeup.png` 204 964 |
+| `02-stopping/D3-arresting-cable` | `DRR_D3_arresting_cable.f3d` 212 940; `D3_iso.png` 182 090; `D3_closeup.png` 207 878 |
 
 ### Gotchas (all seen in this session)
 - **Switch documents in a call of its own** (`open` stage). Activating a document and building in the same script gives "VCS_SKETCH_OVER_CONSTRAINTS" in the first sketch.
@@ -194,3 +225,8 @@ def run(_context: str):
 - Fusion refuses two origin dimensions with the same value and direction in one sketch. `Sk.fix` aligns those points instead.
 - Occurrence `transform2` can only be set on root-level occurrences. `addExistingComponent` compounds transforms, which is why funnel rails are now separate components placed with `transform2`.
 - The coil helix and the funnel placement transforms are computed when built. Re-run the step after parameter changes.
+- (Phase 2) **`addExistingComponent(comp, m)` adds the first occurrence's offset to m** for linked components: every simple section came out 4 m too far along. **Setting `transform2` on linked occurrences afterwards left every reference "broken"**, and even `deleteMe` failed; the fix was closing without saving and reopening. `place()` now does an `addByInsert` per section, and `step_layout` raises if a flat section is misplaced.
+- (Phase 2) Inserting 24–36 linked sections takes over 60 s: the MCP call times out but completes. Check with a readOnly script.
+- (Phase 2) `L.ext` extents are absolute model coordinates, so sketch on an origin plane (no `off`) when using it. An offset sketch plane doubles the offset.
+- (Phase 2) Fusion restarted once mid-script (about 70 trestle extrudes per call). Keep builds to about 30–40 features per call.
+- (Phase 2) Appearance overrides work on child occurrences of linked occurrences (`paint()`), per run instance.

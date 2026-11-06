@@ -4,7 +4,7 @@ Fusion design: "DRR Run G1 3-Section" (links "DRR Base Section", so save the bas
 Run one stage per MCP call (see ../../progress.md, "Folder layout and export method"):
     import runpy; runpy.run_path(r"<this file>")["main"]("<stage>")
 Stages: open, clear, R1, R2, R3, L1, L2, L3, frames1, frames2, frames3, drone, check,
-save, shots, export. The rail and frame stages each take 15-60 s; a time-out on the MCP
+clash, save, shots, export. R3/L3 also build the Exit Hoods (base-cap crown over the overlap). The rail and frame stages each take 15-60 s; a time-out on the MCP
 side usually still finishes in Fusion, so check with a readOnly script before re-running.
 """
 import os
@@ -29,6 +29,7 @@ STAGES = [
     ("frames%d" % (k + 1), (lambda k=k: B.step_run_frames([k], False))) for k in range(3)] + [
     ("drone", lambda: B.step_run_frames([], True)),
     ("check", lambda: (B.step_fix_funnel(), B.step_checks())),
+    ("clash", lambda: B.step_clash(-100, 8200)),   # 6 funnel rails, exit hoods, base section 1
     ("save", lambda: B.step_save("G1 run rebuilt by build_G1.py")),
     ("shots", lambda: (
         B.shoot(F, "G1_iso.png", (-4000, -9000, 6000), (6000, 0, 350)),

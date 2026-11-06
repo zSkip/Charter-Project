@@ -111,6 +111,52 @@ RUN_PARAMS = [
 
 
 # ---------------------------------------------------------------- parts
+def cap_section(yc, S, cy, cw, lower):
+    """Cap cross-section at x=0 (crowned top, flanges, skirts round the core) as Sk.poly args.
+    lower: the nose zone, lowered and narrowed by cap_wall + cap_gap to nest under a tail hood."""
+    yC = '((%s) %s (%s))' % (yc, S, cy)
+    hw = '((%s) / 2)' % cw
+    R = '((((%s) / 2)^2 + cap_crown^2) / (2 * cap_crown))' % cw
+    d2 = '(cap_wall + cap_gap)'
+    if lower:
+        h = '(%s - %s)' % (hw, d2)
+        ze = '(rail_top_h - %s - (%s - sqrt(%s^2 - %s^2)))' % (d2, R, R, h)
+        top = '(rail_top_h - %s)' % d2
+    else:
+        h, ze, top = hw, '(rail_top_h - cap_crown)', 'rail_top_h'
+    yl, yr = '(%s - %s)' % (yC, h), '(%s + %s)' % (yC, h)
+    sl, sr = '((%s) - skirt_out)' % yc, '((%s) + skirt_out)' % yc
+    X = '0 mm'
+    P = [(X, yl, ze), (X, yr, ze), (X, yr, 'flange_bot_z'), (X, sr, 'flange_bot_z'),
+         (X, sr, 'skirt_bot_z'), (X, sl, 'skirt_bot_z'), (X, sl, 'flange_bot_z'),
+         (X, yl, 'flange_bot_z')]
+    return P, {0: ((X, yC, top), R)}
+
+
+def build_hood(parent, tag, yc, x0):
+    """Base-cap tail hood (crowned top and flange walls, no skirts, as on the base cap past
+    section_len) from x0 to x0 + cap_overlap on a straight rail at yc. Task 0: it replaces the
+    last funnel cap's flatter hood, so it nests over the base cap's nose like any base joint."""
+    c, _ = L.newcomp(parent, 'Exit Hood %s' % tag)
+    hw = '(cap_width / 2)'
+    R = '(((cap_width / 2)^2 + cap_crown^2) / (2 * cap_crown))'
+    Ri = '(%s - cap_wall)' % R
+    zi = '(rail_top_h - %s + sqrt(%s^2 - (%s - cap_wall)^2))' % (R, Ri, hw)
+    fb = '(flange_bot_z + cap_wall)'
+
+    def y(e):
+        return '(%s) + (%s)' % (yc, e)
+    X = '0 mm'
+    hi = '%s - cap_wall' % hw
+    P = [(X, y('-' + hw), 'rail_top_h - cap_crown'), (X, y(hw), 'rail_top_h - cap_crown'), (X, y(hw), fb),
+         (X, y(hi), fb), (X, y(hi), zi), (X, y('-(%s)' % hi), zi), (X, y('-(%s)' % hi), fb), (X, y('-' + hw), fb)]
+    k = L.Sk(c, 'YZ')
+    k.poly(P, {0: ((X, yc, 'rail_top_h'), R), 4: ((X, yc, 'rail_top_h - cap_wall'), Ri)})
+    sk = k.done()
+    L.ext(c, sk, sk.profiles.item(0), x0, '(%s) + cap_overlap' % x0, name='Cap %s Hood' % tag)
+    L.setmat(c, 'cf')
+
+
 def build_rail(parent, tag, s, yc, Ln, cw, cy, sxs, guide=False, first=False, exit_ang=None, taper=None):
     """One rail: core, crowned cap, spring points, splice tongue, pins (+ guide strip).
     s: +1 if outboard is +Y. yc: core centre y. Ln: core length. cw: cap width.
@@ -161,19 +207,7 @@ def build_rail(parent, tag, s, yc, Ln, cw, cy, sxs, guide=False, first=False, ex
     d2 = '(cap_wall + cap_gap)'
 
     def section(lower):
-        if lower:
-            h = '(%s - %s)' % (hw, d2)
-            ze = '(rail_top_h - %s - (%s - sqrt(%s^2 - %s^2)))' % (d2, R, R, h)
-            top = '(rail_top_h - %s)' % d2
-        else:
-            h, ze, top = hw, '(rail_top_h - cap_crown)', 'rail_top_h'
-        yl, yr = '(%s - %s)' % (yC, h), '(%s + %s)' % (yC, h)
-        sl, sr = '((%s) - skirt_out)' % yc, '((%s) + skirt_out)' % yc
-        X = '0 mm'
-        P = [(X, yl, ze), (X, yr, ze), (X, yr, 'flange_bot_z'), (X, sr, 'flange_bot_z'),
-             (X, sr, 'skirt_bot_z'), (X, sl, 'skirt_bot_z'), (X, sl, 'flange_bot_z'),
-             (X, yl, 'flange_bot_z')]
-        return P, {0: ((X, yC, top), R)}
+        return cap_section(yc, S, cy, cw, lower)
 
     k = L.Sk(c, 'YZ')
     k.poly(*section(False))
@@ -227,10 +261,11 @@ def build_rail(parent, tag, s, yc, Ln, cw, cy, sxs, guide=False, first=False, ex
     sk = k.done()
     L.ext(c, sk, L.profs(sk), off('core_w / 2 + 0.5 mm'), off('skirt_out + 1 mm'), L.CUT,
           [c.bRepBodies.item(0)])
-    if exit_ang is not None:  # tail hood trimmed flush with the next (straight) cap's inner edge
-        k = L.Sk(c, 'XY')
-        k.poly([turned('-10 mm', '-cap_width / 2'), turned('cap_overlap + 20 mm', '-cap_width / 2'),
-                turned('cap_overlap + 20 mm', '-cap_width / 2 - 60 mm'), turned('-10 mm', '-cap_width / 2 - 60 mm')])
+    if exit_ang is not None:  # cap cut at the joint plane; the hood past it is an Exit Hood (build_hood)
+        k = L.Sk(c, 'XY')    # with the base cap's crown (task 0, option a), built by step_run_rails
+        v0, v1 = '-(%s) - 100 mm' % cw, '(%s) + 100 mm' % cw
+        k.poly([turned('0 mm', v0), turned('cap_overlap + 20 mm', v0),
+                turned('cap_overlap + 20 mm', v1), turned('0 mm', v1)])
         sk = k.done()
         L.ext(c, sk, sk.profiles.item(0), 'skirt_bot_z - 10 mm', 'rail_top_h + 10 mm', L.CUT,
               [c.bRepBodies.item(0)])
@@ -569,6 +604,11 @@ def step_run_rails(sides='RL', clear=True, ks=None):
                        '(funnel_cap_w - cap_width) / 2', sxs, True, first=(k == 0),
                        exit_ang='funnel_ang' if k == n - 1 else None,
                        taper=('%d * section_len' % k, 'cos(funnel_ang)', 'funnel_sections * section_len'))
+            if k == n - 1:  # the last funnel cap's tail hood, on the straight base rail axis
+                for o in [o for o in root.occurrences if o.component.name == 'Exit Hood F%s%d' % (side, k + 1)]:
+                    o.deleteMe()
+                build_hood(root, 'F%s%d' % (side, k + 1), '(rail_cc / 2)' if s > 0 else '-(rail_cc / 2)',
+                           'funnel_sections * section_len')
             m = adsk.core.Matrix3D.create()
             m.setToRotation(-s * th, L.V3(0, 0, 1), L.P3(0, 0, 0))
             x0 = '%d * section_len' % k
@@ -634,7 +674,8 @@ def step_run_frames(ks=None, drone=True):
     print('frames + drone ok')
 
 
-def build_drone(root):
+def build_drone(root, hook=False):
+    """Drone stand-in at drone_x. hook=True adds the D3 arresting hook (D3_PARAMS)."""
     dr, _ = L.newcomp(root, 'Drone Stand-in')
     zw = '(rail_top_h - drone_sink)'
     xt = '(drone_x - tail_arm)'
@@ -664,6 +705,14 @@ def build_drone(root):
     k.rect(('0 mm', '-prop_blade_w / 2', '%s - prop_dia / 2' % hub), ('0 mm', 'prop_blade_w / 2', '%s + prop_dia / 2' % hub))
     sk = k.done()
     L.ext(c, sk, sk.profiles.item(0), xn, '%s + prop_blade_t' % xn, name='DR Prop Blades')
+    if hook:  # shank down from the body, toe pointing forward under the cable: the throat opens forward
+        hx = '(drone_x - hook_back)'
+        c = box('DR Hook', '%s - hook_w' % hx, hx, 'hook_w / 2', 'hook_z', '%s - body_drop' % zw)
+        k = L.Sk(c, 'XY')
+        k.rect((hx, '-hook_w / 2', '0 mm'), ('%s + hook_toe' % hx, 'hook_w / 2', '0 mm'))
+        sk = k.done()
+        L.ext(c, sk, sk.profiles.item(0), 'hook_z', 'hook_z + hook_w / 2', L.JOIN, [c.bRepBodies.item(0)])
+        L.setmat(c, 'steel')
 
 
 def step_checks():
@@ -760,3 +809,381 @@ def export_f3d(folder, name, comp_path=None):
     print('f3d', name, ok, size)
     if not ok or size == 0:
         raise RuntimeError('export failed: ' + path)
+
+
+# ---------------------------------------------------------------- Phase 2: stopping versions
+SIMPLE_NAME = 'DRR Base Section Simple'
+NET_NAME = 'DRR Catch Net'
+G = 9.81
+
+NET_PARAMS = [
+    ('net_span', 'wingspan + 800 mm', 'mm', 'D1 assumed: clear span between the posts (wingtips + 400 each side)'),
+    ('net_bot_z', '150 mm', 'mm', 'D1 assumed: net bottom edge'),
+    ('net_top_z', '1800 mm', 'mm', 'D1 assumed: net top edge (tail top is about 1060)'),
+    ('net_mesh', '250 mm', 'mm', 'D1 assumed: largest mesh opening'),
+    ('net_cord', '12 mm', 'mm', 'D1 assumed: net cord (square stand-in)'),
+    ('post_w', '120 mm', 'mm', 'D1 assumed: square steel post'),
+    ('post_h', 'net_top_z + 200 mm', 'mm', 'derived'),
+    ('post_plate_w', '400 mm', 'mm', 'D1 assumed: post base plate'),
+    ('brace_run', '1500 mm', 'mm', 'D1 assumed: back-brace foot behind the net plane'),
+    ('brace_w', '80 mm', 'mm', 'D1 assumed: back-brace bar'),
+]
+STOP_PARAMS = [
+    ('run_sections', '36', '', 'stopping run length in sections'),
+    ('net_gap', '1500 mm', 'mm', 'D1 assumed: last section end to the net plane'),
+    ('drone_x', '1.5 * section_len', 'mm', 'stand-in wing mid-chord: touchdown on the detailed sections'),
+]
+VPARAMS = {
+    'A': [('run_sections', '36', '', 'A: friction only, 72 m')],
+    'B': [('run_sections', '24', '', 'B: 48 m'), ('brake_start', '12', '', 'B: standard sections before the braking zone'),
+          ('brake_grip', '0.6', '', 'spec B: high-grip cap surface')],
+    'C': [('run_sections', '32', '', 'C: 18 flat + 14 ramp'), ('ramp_start', '18', '', 'C: flat sections before the ramp'),
+          ('ramp_ang', '5 deg', 'deg', 'spec C: ramp angle'), ('trestle_w', '100 mm', 'mm', 'C assumed: ramp trestle tube'),
+          ('trestle_beam_h', '100 mm', 'mm', 'C assumed: trestle top beam depth')],
+    'D1': [('run_sections', '3', '', 'D1: short run'),
+           ('drone_x', 'run_sections * section_len + net_gap - 2300 mm', 'mm', 'D1: prop 1.5 m short of the net')],
+    'D2': [('run_sections', '24', '', 'D2: 48 m'), ('grip0', '0.2', '', 'spec D2: grip at the entry'),
+           ('grip1', '0.7', '', 'spec D2: grip at the end'), ('grip_bands', '6', '', 'D2: appearance bands')],
+    'D3': [('run_sections', '6', '', 'D3: 12 m'),
+           ('cable_x1', '1000 mm', 'mm', 'D3 assumed: first cross cable, between U-frames'),
+           ('cable_x2', '3000 mm', 'mm', 'D3 assumed: second cross cable'),
+           ('cable_z', '150 mm', 'mm', 'D3 assumed: cable height, above the cross bars and below the prop tip'),
+           ('cable_d', '16 mm', 'mm', 'D3 assumed: cable stand-in'),
+           ('drum_y', 'rail_cc / 2 + 900 mm', 'mm', 'D3 assumed: energy-absorber drum centre from the run centreline'),
+           ('drum_d', '450 mm', 'mm', 'D3 assumed'), ('drum_h', '350 mm', 'mm', 'D3 assumed'),
+           ('hook_back', '1200 mm', 'mm', 'D3 assumed: hook behind the wing mid-chord'),
+           ('hook_z', '110 mm', 'mm', 'D3 assumed: hook toe underside, unloaded'),
+           ('hook_toe', '120 mm', 'mm', 'D3 assumed: forward toe length'), ('hook_w', '40 mm', 'mm', 'D3 assumed: hook bar'),
+           ('arrest_g', '2', '', 'spec D3: arresting deceleration, g'),
+           ('drone_x', 'cable_x1 - 300 mm - hook_toe + hook_back', 'mm', 'D3: hook throat 300 mm short of cable 1')],
+}
+
+
+def vparams(vid):
+    return PARAMS + RUN_PARAMS + STOP_PARAMS + VPARAMS[vid]
+
+
+def open_or_new(name, params, desc):
+    """'open' stage: activate the design, or create it with params and save it in the project."""
+    if any(app.documents.item(i).name == name for i in range(app.documents.count)) or find_file(name):
+        return activate(name)
+    doc = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
+    setup_design()
+    L.set_params(params)
+    print('new design saved', doc.saveAs(name, get_project().rootFolder, desc, ''), name)
+
+
+def blk(c, x0, x1, y0, y1, z0, z1, name=None):
+    """Box: XY rectangle x0..x1, y0..y1 extruded z0..z1 (new body)."""
+    k = L.Sk(c, 'XY')
+    k.rect((x0, y0, '0 mm'), (x1, y1, '0 mm'))
+    sk = k.done()
+    return L.ext(c, sk, sk.profiles.item(0), z0, z1, name=name).bodies.item(0)
+
+
+def cyl(c, kind, ctr, dia, a, b, name=None):
+    k = L.Sk(c, kind)
+    k.circle(ctr, dia)
+    sk = k.done()
+    return L.ext(c, sk, sk.profiles.item(0), a, b, name=name).bodies.item(0)
+
+
+def pattern(c, body, axis, n, spacing):
+    col = adsk.core.ObjectCollection.create()
+    col.add(body)
+    pf = c.features.rectangularPatternFeatures
+    inp = pf.createInput(col, axis, L.VI(str(n)), L.VI(spacing),
+                         adsk.fusion.PatternDistanceType.SpacingPatternDistanceType)
+    return pf.add(inp)
+
+
+def step_simple():
+    """DRR Base Section Simple: light stand-in for long runs. Plain bodies only: hollow cores
+    (with the pin holes the previous section's pins go through), solid caps with the lowered
+    nose zone, U-frame halves and foot pads. No springs, screws, pins, tongues or plates."""
+    d, root = setup_design()
+    L.set_params(PARAMS)
+    sxs = ('frame_inset', 'section_len - frame_inset')
+    for s, side in ((1, 'R'), (-1, 'L')):
+        S = '+' if s > 0 else '-'
+        yc = '(rail_cc / 2)' if s > 0 else '-(rail_cc / 2)'
+
+        def off(e):
+            return '(%s) %s (%s)' % (yc, S, e)
+        half, _ = L.newcomp(root, 'Simple Half %s' % side)
+        c, _ = L.newcomp(half, 'Simple Core %s' % side)
+        k = L.Sk(c, 'YZ')
+        k.rect(('0 mm', off('-core_w / 2'), 'core_bot_z'), ('0 mm', off('core_w / 2'), 'core_top_z'))
+        k.rect(('0 mm', off('-(core_w / 2 - core_wall)'), 'core_bot_z + core_wall'),
+               ('0 mm', off('core_w / 2 - core_wall'), 'core_top_z - core_wall'))
+        sk = k.done()
+        body = L.ext(c, sk, L.profs(sk, 2), '0 mm', 'section_len', name='Core %s' % side).bodies.item(0)
+        L.hole_z(c, body, [('pin_x1', yc), ('pin_x2', yc)], 'pin_d + 2 * slide_fit',
+                 'core_bot_z - 1 mm', 'core_top_z + 1 mm')
+        L.setmat(c, 'al')
+        c, _ = L.newcomp(half, 'Simple Cap %s' % side)
+        k = L.Sk(c, 'YZ')
+        k.poly(*cap_section(yc, S, '0 mm', 'cap_width', False))
+        sk = k.done()
+        body = L.ext(c, sk, sk.profiles.item(0), 'cap_overlap', 'section_len', name='Cap %s' % side).bodies.item(0)
+        k = L.Sk(c, 'YZ')
+        k.poly(*cap_section(yc, S, '0 mm', 'cap_width', True))
+        sk = k.done()
+        L.ext(c, sk, sk.profiles.item(0), '0 mm', 'cap_overlap', L.JOIN, [body])
+        k = L.Sk(c, 'YZ')  # clear the core and the space above it (pin heads of the previous section)
+        k.rect(('0 mm', off('-(core_w / 2 + cap_gap)'), 'skirt_bot_z - 1 mm'),
+               ('0 mm', off('core_w / 2 + cap_gap'), 'flange_bot_z'))
+        sk = k.done()
+        L.ext(c, sk, sk.profiles.item(0), '-1 mm', 'section_len + 1 mm', L.CUT, [c.bRepBodies.item(0)])
+        L.setmat(c, 'cf')
+        c, _ = L.newcomp(half, 'Simple Frames %s' % side)
+        for i, xf in enumerate(sxs):
+            t = '%s%d' % (side, i + 1)
+            b = blk(c, '(%s) - frame_tube / 2' % xf, '(%s) + frame_tube / 2' % xf,
+                    '(%s) - frame_tube / 2' % yc, '(%s) + frame_tube / 2' % yc, 'foot_h', 'core_bot_z', 'Frame ' + t)
+            k = L.Sk(c, 'XZ')
+            k.rect(('(%s) - frame_tube / 2' % xf, '0 mm', 'foot_h'), ('(%s) + frame_tube / 2' % xf, '0 mm', 'xbar_top_z'))
+            sk = k.done()
+            L.ext(c, sk, sk.profiles.item(0), yc, 'split_gap / 2' if s > 0 else '-split_gap / 2', L.JOIN, [b])
+            cyl(c, 'XY', (xf, yc, '0 mm'), 'foot_pad_d', '0 mm', 'foot_h', 'Foot ' + t)
+        for b in c.bRepBodies:
+            b.material = L.mat('steel' if b.name.startswith('Foot') else 'al')
+    print('simple section: %d bodies' % sum(o.component.bRepBodies.count for o in root.allOccurrences))
+
+
+def step_net():
+    """DRR Catch Net (D1): reusable end-of-run net on two braced posts. Net plane at x=0,
+    braces behind it (+x). Linked at the end of every stopping run by step_layout."""
+    d, root = setup_design()
+    L.set_params(PARAMS + NET_PARAMS)
+    c, _ = L.newcomp(root, 'Net Posts')
+    for s, sd in ((1, 'R'), (-1, 'L')):
+        yp = '(net_span / 2 + post_w / 2)' if s > 0 else '-(net_span / 2 + post_w / 2)'
+        blk(c, '-post_plate_w / 2', 'post_plate_w / 2', '%s - post_plate_w / 2' % yp, '%s + post_plate_w / 2' % yp,
+            '0 mm', 'foot_plate_t', 'Post Plate ' + sd)
+        blk(c, '-post_w / 2', 'post_w / 2', '%s - post_w / 2' % yp, '%s + post_w / 2' % yp,
+            'foot_plate_t', 'post_h', 'Post ' + sd)
+        k = L.Sk(c, 'XZ')
+        k.poly([('post_w / 2', '0 mm', 'net_top_z - 100 mm'), ('post_w / 2', '0 mm', 'net_top_z - 100 mm - 1.5 * brace_w'),
+                ('brace_run - 1.5 * brace_w', '0 mm', 'foot_plate_t'), ('brace_run', '0 mm', 'foot_plate_t')])
+        sk = k.done()
+        L.ext(c, sk, sk.profiles.item(0), '%s - brace_w / 2' % yp, '%s + brace_w / 2' % yp, name='Brace ' + sd)
+        blk(c, 'brace_run - 250 mm', 'brace_run + 50 mm', '%s - 150 mm' % yp, '%s + 150 mm' % yp,
+            '0 mm', 'foot_plate_t', 'Brace Plate ' + sd)
+    L.setmat(c, 'steel')
+    c, _ = L.newcomp(root, 'Net Mesh')
+    nv = int(math.ceil(L.ev('net_span') / L.ev('net_mesh'))) + 1
+    nh = int(math.ceil(L.ev('net_top_z - net_bot_z') / L.ev('net_mesh'))) + 1
+    b = blk(c, '-net_cord / 2', 'net_cord / 2', '-net_span / 2', '-net_span / 2 + net_cord',
+            'net_bot_z', 'net_top_z', 'Net Cord V')
+    pattern(c, b, c.yConstructionAxis, nv, '(net_span - net_cord) / %d' % (nv - 1))
+    k = L.Sk(c, 'XZ')
+    k.rect(('-net_cord / 2', '0 mm', 'net_bot_z'), ('net_cord / 2', '0 mm', 'net_bot_z + net_cord'))
+    sk = k.done()
+    b = L.ext(c, sk, sk.profiles.item(0), '-net_span / 2', 'net_span / 2', name='Net Cord H').bodies.item(0)
+    pattern(c, b, c.zConstructionAxis, nh, '(net_top_z - net_bot_z - net_cord) / %d' % (nh - 1))
+    L.setmat(c, 'nylon')
+    print('net: %d x %d cords, material %s' % (nv, nh, L.mat('nylon').name if L.mat('nylon') else None))
+
+
+def sec_matrix(k, k0=None):
+    """Placement of run section k: flat along x, or for k >= k0 (C ramp) turned nose-up by
+    ramp_ang about the cap-top line at the kink (x = k0 * section_len + cap_overlap)."""
+    m = adsk.core.Matrix3D.create()
+    Ls = L.ev('section_len')
+    if k0 is None or k < k0:
+        m.translation = L.V3(k * Ls / 10.0, 0, 0)
+        return m
+    a, j = L.evu('ramp_ang', 'rad'), k - k0
+    m.setToRotation(-a, L.V3(0, 1, 0), L.P3(0, 0, 0))
+    pl = L.P3(L.ev('cap_overlap') / 10.0, 0, L.ev('rail_top_h') / 10.0)
+    pl.transformBy(m)
+    gx = (k0 * Ls + L.ev('cap_overlap') + j * Ls * math.cos(a)) / 10.0
+    gz = (L.ev('rail_top_h') + j * Ls * math.sin(a)) / 10.0
+    m.translation = L.V3(gx - pl.x, 0, gz - pl.z)
+    return m
+
+
+def place(root, name, m, cache):
+    """Link design name at m. Every section is its own addByInsert: addExistingComponent adds
+    the first occurrence's offset to m, and setting transform2 on linked occurrences afterwards
+    left the design with broken references (seen 2026-11-05)."""
+    if name not in cache:
+        cache[name] = find_file(name)
+    return root.occurrences.addByInsert(cache[name], m, True)
+
+
+def net_matrix(n, k0=None):
+    """Catch net placement: net plane net_gap past the end of section n-1 (raised to the ramp top for C)."""
+    e = L.P3(L.ev('cap_overlap') / 10.0, 0, L.ev('rail_top_h') / 10.0)
+    e.transformBy(sec_matrix(n, k0))
+    m = adsk.core.Matrix3D.create()
+    m.translation = L.V3(e.x + L.ev('net_gap - cap_overlap') / 10.0, 0, e.z - L.ev('rail_top_h') / 10.0)
+    return m
+
+
+def step_layout(detailed=(0, 1), ramp_from=None, net=True):
+    """Empty the run design and link run_sections sections along x: indices in detailed link
+    BASE_NAME, the rest SIMPLE_NAME. Then the D1 catch net (NET_NAME) at the run end."""
+    root = L.des().rootComponent
+    while root.occurrences.count:
+        root.occurrences.item(0).deleteMe()
+    n = int(round(L.evu('run_sections', '')))
+    cache = {}
+    for k in range(n):
+        place(root, BASE_NAME if k in detailed else SIMPLE_NAME, sec_matrix(k, ramp_from), cache)
+    if net:
+        place(root, NET_NAME, net_matrix(n, ramp_from), cache)
+    xs = [round(o.transform2.translation.x * 10) for o in sections()]
+    bad = [k for k, x in enumerate(xs) if ramp_from is None and abs(x - k * L.ev('section_len')) > 0.5]
+    if bad:
+        raise RuntimeError('sections misplaced: %s' % bad)
+    print('layout: %d sections (%d detailed), net=%s, length %.1f m' % (n, len(detailed), net, n * L.ev('section_len') / 1000))
+
+
+def step_drone(hook=False):
+    root = L.des().rootComponent
+    for o in [o for o in root.occurrences if o.component.name == 'Drone Stand-in']:
+        o.deleteMe()
+    build_drone(root, hook)
+    print('drone at x=%.0f' % L.ev('drone_x'))
+
+
+def sections():
+    """Linked run sections (base or simple), sorted along the run."""
+    root = L.des().rootComponent
+    occ = [o for o in root.occurrences if o.component.name.startswith((BASE_NAME, SIMPLE_NAME))]
+    return sorted(occ, key=lambda o: o.transform2.translation.x)
+
+
+def paint(o, a, key='Cap'):
+    """Appearance override on every child occurrence of o whose component name holds key."""
+    n = 0
+    for c in o.childOccurrences:
+        if key in c.component.name:
+            c.appearance = a
+            n += 1
+        else:
+            n += paint(c, a, key)
+    return n
+
+
+def step_bands(bands):
+    """bands: [(k0, k1, appearance name, rgb)]: cap appearance on run sections k0..k1-1."""
+    secs = sections()
+    out = []
+    for k0, k1, name, rgb in bands:
+        a = L.look(name, rgb)
+        out.append('%s: %d caps' % (name, sum(paint(o, a) for o in secs[k0:k1])))
+    print('; '.join(out))
+
+
+def stop_x(segs):
+    """segs [(length m, grip, slope deg)]: stop distance from v^2 = 2 a d, a = g (grip cos + sin)."""
+    v2 = (L.evu('landing_speed_kn', '') * 1852.0 / 3600.0) ** 2
+    x = 0.0
+    for ln, mu, ang in segs:
+        a = G * (mu * math.cos(math.radians(ang)) + math.sin(math.radians(ang)))
+        if v2 <= 2 * a * ln:
+            return x + v2 / (2 * a), 0.0
+        v2 -= 2 * a * ln
+        x += ln
+    return x, math.sqrt(v2)
+
+
+def report_stop(label, segs):
+    x, v = stop_x(segs)
+    print('%s: %s' % (label, 'stops at %.1f m' % x if v == 0 else 'run ends at %.1f m with %.1f m/s left' % (x, v)))
+
+
+def step_clash(x0, x1, extra=()):
+    """Interference check of cores, caps, tongues, pins and strips (+ extra name prefixes)
+    whose boxes reach into global x0..x1 (mm)."""
+    d = L.des()
+    pre = ('Core ', 'Cap ', 'Tongue ', 'Pin ', 'Guide ') + tuple(extra)
+    col = adsk.core.ObjectCollection.create()
+
+    def walk(occs):
+        for o in occs:
+            for b in o.bRepBodies:
+                bb = b.boundingBox
+                if b.name.startswith(pre) and bb.maxPoint.x * 10 > x0 and bb.minPoint.x * 10 < x1:
+                    col.add(b)
+            walk(o.childOccurrences)
+    walk(d.rootComponent.occurrences)
+    res = d.analyzeInterference(d.createInterferenceInput(col))
+    hits = ['%s/%s %.2fcm3' % (r.entityOne.name, r.entityTwo.name, r.interferenceBody.volume) for r in res]
+    print('clash x %d-%d: %d bodies, %d hits %s' % (x0, x1, col.count, len(hits), hits[:6]))
+
+
+def step_d3_gear():
+    """D3: two cross cables at cable_z between energy-absorber drums at the sides."""
+    root = L.des().rootComponent
+    for o in [o for o in root.occurrences if o.component.name == 'Arresting Gear']:
+        o.deleteMe()
+    c, _ = L.newcomp(root, 'Arresting Gear')
+    for i, cx in enumerate(('cable_x1', 'cable_x2')):
+        cyl(c, 'XZ', (cx, '0 mm', 'cable_z'), 'cable_d', '-(drum_y - drum_d / 2)', 'drum_y - drum_d / 2',
+            'Cable %d' % (i + 1))
+        for s, sd in ((1, 'R'), (-1, 'L')):
+            yd = '(drum_y)' if s > 0 else '-(drum_y)'
+            blk(c, '(%s) - drum_d / 2 - 50 mm' % cx, '(%s) + drum_d / 2 + 50 mm' % cx,
+                '%s - drum_d / 2 - 50 mm' % yd, '%s + drum_d / 2 + 50 mm' % yd, '0 mm', 'foot_plate_t',
+                'Drum Base %d%s' % (i + 1, sd))
+            cyl(c, 'XY', (cx, yd, '0 mm'), 'drum_d', 'foot_plate_t', 'drum_h', 'Drum %d%s' % (i + 1, sd))
+    L.setmat(c, 'steel')
+    print('arresting gear: %d bodies' % c.bRepBodies.count)
+
+
+def step_c_trestles(ks):
+    """C: a braced trestle under each U-frame of ramp sections ks (beam under the feet, two
+    posts, X-brace across). Feet less than 30 mm up use their levelling studs instead."""
+    root = L.des().rootComponent
+    k0 = int(round(L.evu('ramp_start', '')))
+    for k in ks:
+        for o in [o for o in root.occurrences if o.component.name == 'Ramp Trestles %d' % (k + 1)]:
+            o.deleteMe()
+        c, _ = L.newcomp(root, 'Ramp Trestles %d' % (k + 1))
+        for i, xl in enumerate(('frame_inset', 'section_len - frame_inset')):
+            p = L.P3(L.ev(xl) / 10.0, 0, 0)
+            p.transformBy(sec_matrix(k, k0))
+            x, z = p.x * 10, p.z * 10
+            if z < 30:
+                continue
+            X, Z, t = '%.1f mm' % x, '%.1f mm' % z, '%d%d' % (k + 1, i + 1)
+            blk(c, '%s - foot_pad_d' % X, '%s + foot_pad_d' % X, '-(rail_cc / 2 + 150 mm)', 'rail_cc / 2 + 150 mm',
+                '%s - trestle_beam_h' % Z, Z, 'Trestle Beam ' + t)
+            for s in (1, -1):
+                yp = '(rail_cc / 2)' if s > 0 else '-(rail_cc / 2)'
+                blk(c, '%s - trestle_w / 2' % X, '%s + trestle_w / 2' % X, '%s - trestle_w / 2' % yp,
+                    '%s + trestle_w / 2' % yp, '0 mm', '%s - trestle_beam_h' % Z, 'Trestle Post %s%d' % (t, s))
+            if z > 600:
+                for s in (1, -1):
+                    k2 = L.Sk(c, 'YZ')  # origin plane: L.ext extents are absolute
+                    a = '%s(rail_cc / 2 - trestle_w / 2)' % ('' if s > 0 else '-')
+                    b = '%s(rail_cc / 2 - trestle_w / 2)' % ('-' if s > 0 else '')
+                    k2.poly([(X, a, '200 mm'), (X, a, '320 mm'), (X, b, '%s - trestle_beam_h - 80 mm' % Z),
+                             (X, b, '%s - trestle_beam_h - 200 mm' % Z)])
+                    sk = k2.done()
+                    L.ext(c, sk, sk.profiles.item(0), '%s - 20 mm' % X, '%s + 20 mm' % X,
+                          name='Trestle Brace %s%d' % (t, s))
+        L.setmat(c, 'steel')
+    print('trestles built for sections', [k + 1 for k in ks])
+
+
+def step_c_net_base():
+    """C: columns that raise the catch net's post and brace plates to the ramp top."""
+    root = L.des().rootComponent
+    for o in [o for o in root.occurrences if o.component.name == 'Net Base']:
+        o.deleteMe()
+    net = [o for o in root.occurrences if o.component.name.startswith(NET_NAME)][0]
+    t = net.transform2.translation
+    X, Z = '%.1f mm' % (t.x * 10), '%.1f mm' % (t.z * 10)
+    c, _ = L.newcomp(root, 'Net Base')
+    for s, sd in ((1, 'R'), (-1, 'L')):
+        yp = '(wingspan / 2 + 400 mm + 60 mm)' if s > 0 else '-(wingspan / 2 + 400 mm + 60 mm)'
+        for x0, nm in (('0 mm', 'Post'), ('1400 mm', 'Brace')):
+            blk(c, '%s + %s - 100 mm' % (X, x0), '%s + %s + 100 mm' % (X, x0), '%s - 100 mm' % yp,
+                '%s + 100 mm' % yp, '0 mm', Z, 'Net Column %s %s' % (nm, sd))
+    L.setmat(c, 'steel')
+    print('net raised by %.0f mm' % (t.z * 10))
